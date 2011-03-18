@@ -1,0 +1,34 @@
+# Makefile for a test client for the superv daemon 
+# This is makefile is for a cross-platform overo build
+#
+
+ifeq ($(strip $(OETMP)),)
+	OETMP = /oe6
+endif
+
+
+TOOLDIR = $(OETMP)/sysroots/`uname -m`-linux/usr/armv7a/bin
+
+STAGEDIR = $(OETMP)/sysroots/armv7a-angstrom-linux-gnueabi/usr
+
+CC = $(TOOLDIR)/arm-angstrom-linux-gnueabi-gcc
+
+CFLAGS = -Wall
+
+LIBDIR = $(STAGEDIR)/lib
+
+INCDIR = $(STAGEDIR)/include
+
+TARGET = snap
+
+$(TARGET): snap.c
+	$(CC) $(CFLAGS) -I $(INCDIR) -L $(LIBDIR) snap.c -o $(TARGET)
+
+install:
+	scp $(TARGET) root@192.168.4.50:/home/root
+
+clean:
+	rm -f $(TARGET)
+
+
+
