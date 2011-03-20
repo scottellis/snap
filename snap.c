@@ -53,6 +53,8 @@ static int xioctl(int fd, int request, void *arg)
 {
 	int r;
 
+	printf("xioctl(fd, 0x%08X, arg)\n", request);
+
 	do {
 		r = ioctl(fd, request, arg);
 	} while (-1 == r && EINTR == errno);
@@ -105,7 +107,8 @@ static int read_frame (void)
                 }
 
 		//printf("IO_METHOD_READ\n");
-                process_image (buffers[0].start);
+                //process_image (buffers[0].start);
+		write_image(buffers[0].start, buffers[0].length);
 
                 break;
 
@@ -444,12 +447,13 @@ static void init_userp(unsigned int buffer_size)
 
 static void init_device(void)
 {
-	struct v4l2_capability cap;
-	struct v4l2_cropcap cropcap;
-	struct v4l2_crop crop;
+//	struct v4l2_capability cap;
+//	struct v4l2_cropcap cropcap;
+//	struct v4l2_crop crop;
 	struct v4l2_format fmt;
 	unsigned int min;
 
+/*
 	if (-1 == xioctl(fd, VIDIOC_QUERYCAP, &cap)) {
 		if (EINVAL == errno) {
 			fprintf (stderr, "%s is no V4L2 device\n",
@@ -489,31 +493,30 @@ static void init_device(void)
 	}
 
 
-	/* Select video input, video standard and tune here. */
-
+	// Select video input, video standard and tune here.
 	memset(&cropcap, 0, sizeof(cropcap));
 
 	cropcap.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 	if (0 == xioctl(fd, VIDIOC_CROPCAP, &cropcap)) {
 		crop.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		crop.c = cropcap.defrect; /* reset to default */
+		crop.c = cropcap.defrect; // reset to default
 
 		if (-1 == xioctl(fd, VIDIOC_S_CROP, &crop)) {
 			switch (errno) {
 			case EINVAL:
-				/* Cropping not supported. */
+				// Cropping not supported.
 				break;
 			default:
-				/* Errors ignored. */
+				// Errors ignored.
 				break;
 			}
 		}
 	} 
 	else {        
-		/* Errors ignored. */
+		// Errors ignored.
 	}
-
+*/
 	memset(&fmt, 0, sizeof(fmt));
 
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -522,6 +525,7 @@ static void init_device(void)
 	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_SGRBG10;
 	fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
+	printf("=== snap calling VDIOC_S_FMT ===\n");
 	if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
 		errno_exit("VIDIOC_S_FMT");
 
