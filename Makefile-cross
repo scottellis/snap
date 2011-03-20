@@ -25,7 +25,7 @@ $(TARGET): snap.c
 	$(CC) $(CFLAGS) -I $(INCDIR) -L $(LIBDIR) snap.c -o $(TARGET)
 
 install:
-	scp $(TARGET) root@192.168.4.50:/home/root
+	sudo cp $(TARGET) /exports/overo/home/root
 
 clean:
 	rm -f $(TARGET)
