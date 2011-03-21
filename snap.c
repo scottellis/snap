@@ -53,7 +53,7 @@ static int xioctl(int fd, int request, void *arg)
 {
 	int r;
 
-	printf("xioctl(fd, 0x%08X, arg)\n", request);
+	//printf("xioctl(fd, 0x%08X, arg)\n", request);
 
 	do {
 		r = ioctl(fd, request, arg);
@@ -250,6 +250,7 @@ static void start_capturing(void)
 {
 	unsigned int i;
 	enum v4l2_buf_type type;
+	struct v4l2_buffer buf;
 
 	switch (io) {
 	case IO_METHOD_READ:
@@ -258,8 +259,6 @@ static void start_capturing(void)
 
 	case IO_METHOD_MMAP:
 		for (i = 0; i < n_buffers; ++i) {
-			struct v4l2_buffer buf;
-
 			memset(&buf, 0, sizeof(buf));
 
 			buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -279,8 +278,6 @@ static void start_capturing(void)
 
 	case IO_METHOD_USERPTR:
 		for (i = 0; i < n_buffers; ++i) {
-			struct v4l2_buffer buf;
-
 			memset(&buf, 0, sizeof(buf));
 
 			buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -350,9 +347,9 @@ static void init_mmap(void)
 
 	memset(&req, 0, sizeof(req));
 
-	req.count               = 4;
-	req.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	req.memory              = V4L2_MEMORY_MMAP;
+	req.count = 2;
+	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	req.memory = V4L2_MEMORY_MMAP;
 
 	if (-1 == xioctl(fd, VIDIOC_REQBUFS, &req)) {
 		if (EINVAL == errno) {
@@ -525,7 +522,7 @@ static void init_device(void)
 	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_SGRBG10;
 	fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-	printf("=== snap calling VDIOC_S_FMT ===\n");
+	//printf("=== snap calling VDIOC_S_FMT ===\n");
 	if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
 		errno_exit("VIDIOC_S_FMT");
 
