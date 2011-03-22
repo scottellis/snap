@@ -1,6 +1,4 @@
-# Makefile for a test client for the superv daemon 
-# This is makefile is for a cross-platform overo build
-#
+# Use this makefile for a cross-platform overo build
 
 ifeq ($(strip $(OETMP)),)
 	OETMP = /oe6
