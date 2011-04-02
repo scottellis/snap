@@ -30,6 +30,7 @@ struct buffer {
 };
 
 static char *dev_name = NULL;
+static int exposure_us;
 static int pixel_format;
 static int image_width = 2560;
 static int image_height = 1920;
@@ -52,6 +53,35 @@ static int xioctl(int fd, int request, void *arg)
 	} while (-1 == r && EINTR == errno);
 
 	return r;
+}
+
+static void set_exposure(int fd, int exposure)
+{
+	struct v4l2_queryctrl queryctrl;
+	struct v4l2_control control;
+
+	memset(&queryctrl, 0, sizeof (queryctrl));
+	queryctrl.id = V4L2_CID_EXPOSURE;
+
+	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+		if (errno != EINVAL) {
+		        perror("VIDIOC_QUERYCTRL");
+		} 
+		else {
+		        printf("V4L2_CID_EXPOSURE is not supported\n");
+		}
+	} 
+	else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
+		printf("V4L2_CID_EXPOSURE is not supported\n");
+	} 
+	else {
+		memset(&control, 0, sizeof (control));
+		control.id = V4L2_CID_EXPOSURE;
+		control.value = exposure;
+
+		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
+		        perror("VIDIOC_S_CTRL");
+	}
 }
 
 static void write_image(const void *p, size_t length)
@@ -290,6 +320,9 @@ static void init_device(void)
 		fmt.fmt.pix.sizeimage = min;
 	}
 
+	if (exposure_us > 0)
+		set_exposure(fd, exposure_us);
+
 	init_mmap();
 }
 
@@ -331,6 +364,7 @@ static void usage(FILE *fp, int argc, char **argv)
 		 "Usage: %s [options]\n\n"
 		 "Options:\n"
 		 "-d | --device name   Video device name [/dev/video0]\n"
+		 "-e | --exposure      Exposure time in microseconds\n"
 		 "-b | --bayer         Request image in bayer GRBG format\n"
 		 "-y | --yuv           Request image in YUYV format\n"
 		 "-h | --help          Print this message\n"
@@ -338,10 +372,11 @@ static void usage(FILE *fp, int argc, char **argv)
 		 argv[0]);
 }
 
-static const char short_options [] = "d:byh";
+static const char short_options [] = "d:e:byh";
 
 static const struct option long_options [] = {
 	{ "device",	required_argument,	NULL,	'd' },
+	{ "exposure",	required_argument,	NULL,	'e' },
 	{ "bayer",	no_argument,		NULL,	'b' },
 	{ "yuv",	no_argument,		NULL,	'y' },	
 	{ "help",	no_argument,		NULL,	'h' },
@@ -369,6 +404,16 @@ int main(int argc, char **argv)
 
 		case 'd':
 			dev_name = optarg;
+			break;
+
+		case 'e':
+			exposure_us = atol(optarg);
+
+			if (exposure_us < 1)
+				exposure_us = 1;
+			else if (exposure_us > 1000000)
+				exposure_us = 1000000;
+
 			break;
 
 		case 'b':
