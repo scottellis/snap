@@ -31,8 +31,8 @@ struct buffer {
 
 static char *dev_name = NULL;
 static int pixel_format;
-static int image_width = 2592;
-static int image_height = 1944;
+static int image_width = 2560;
+static int image_height = 1920;
 static int fd = -1;
 struct buffer *buffers = NULL;
 static unsigned int n_buffers = 0;
