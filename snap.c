@@ -409,9 +409,11 @@ static void usage(FILE *fp, int argc, char **argv)
 	fprintf (fp,
 		 "Usage: %s [options]\n\n"
 		 "Options:\n"
-		 "-d | --device name   Video device name [/dev/video0]\n"
 		 "-e | --exposure      Exposure time in microseconds\n"
-		 "-b | --bayer         Request image in bayer GRBG format\n"
+		 "-r | --red           Red gain\n"
+		 "-g | --green         Green gain\n"
+		 "-b | --blue          Blue gain\n"
+		 "-a | --bayer         Request image in bayer GRBG format\n"
 		 "-y | --yuv           Request image in YUYV format\n"
 		 "-h | --help          Print this message\n"
 		 "",
