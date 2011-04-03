@@ -23,20 +23,28 @@
 #include <asm/types.h>
 #include <linux/videodev2.h>
 
+#define V4L2_MT9P031_GREEN_GAIN		(V4L2_CID_PRIVATE_BASE+1)
+#define V4L2_MT9P031_BLUE_GAIN		(V4L2_CID_PRIVATE_BASE+2)
+#define V4L2_MT9P031_RED_GAIN		(V4L2_CID_PRIVATE_BASE+3)
 
 struct buffer {
         void *start;
         size_t length;
 };
 
-static char *dev_name = NULL;
-static int exposure_us;
-static int pixel_format;
-static int image_width = 2560;
-static int image_height = 1920;
-static int fd = -1;
-struct buffer *buffers = NULL;
-static unsigned int n_buffers = 0;
+#define RED_GAIN 0
+#define GREEN_GAIN 1
+#define BLUE_GAIN 2
+int gain[3];
+
+char dev_name[] = "/dev/video0";
+int exposure_us;
+int pixel_format;
+int image_width = 2560;
+int image_height = 1920;
+int fd = -1;
+struct buffer *buffers;
+unsigned int n_buffers;
 
 static void errno_exit(const char *s)
 {
@@ -78,6 +86,35 @@ static void set_exposure(int fd, int exposure)
 		memset(&control, 0, sizeof (control));
 		control.id = V4L2_CID_EXPOSURE;
 		control.value = exposure;
+
+		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
+		        perror("VIDIOC_S_CTRL");
+	}
+}
+
+static void set_gain(int fd, int control_id, int gain)
+{
+	struct v4l2_queryctrl queryctrl;
+	struct v4l2_control control;
+
+	memset(&queryctrl, 0, sizeof (queryctrl));
+	queryctrl.id = control_id;
+
+	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+		if (errno != EINVAL) {
+		        perror("VIDIOC_QUERYCTRL");
+		} 
+		else {
+		        printf("Control is not supported\n");
+		}
+	} 
+	else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
+		printf("Control is not supported\n");
+	} 
+	else {
+		memset(&control, 0, sizeof (control));
+		control.id = control_id;
+		control.value = gain;
 
 		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
 		        perror("VIDIOC_S_CTRL");
@@ -323,6 +360,15 @@ static void init_device(void)
 	if (exposure_us > 0)
 		set_exposure(fd, exposure_us);
 
+	if (gain[RED_GAIN] > 0)
+		set_gain(fd, V4L2_MT9P031_RED_GAIN, gain[RED_GAIN]);
+
+	if (gain[GREEN_GAIN] > 0)
+		set_gain(fd, V4L2_MT9P031_GREEN_GAIN, gain[GREEN_GAIN]);
+
+	if (gain[BLUE_GAIN] > 0)
+		set_gain(fd, V4L2_MT9P031_BLUE_GAIN, gain[BLUE_GAIN]);
+
 	init_mmap();
 }
 
@@ -372,12 +418,14 @@ static void usage(FILE *fp, int argc, char **argv)
 		 argv[0]);
 }
 
-static const char short_options [] = "d:e:byh";
+static const char short_options [] = "e:r:g:b:ayh";
 
 static const struct option long_options [] = {
-	{ "device",	required_argument,	NULL,	'd' },
 	{ "exposure",	required_argument,	NULL,	'e' },
-	{ "bayer",	no_argument,		NULL,	'b' },
+	{ "red",	required_argument,	NULL,	'r' },
+	{ "green",	required_argument,	NULL,	'g' },
+	{ "blue",	required_argument,	NULL,	'b' },
+	{ "bayer",	no_argument,		NULL,	'a' },
 	{ "yuv",	no_argument,		NULL,	'y' },	
 	{ "help",	no_argument,		NULL,	'h' },
 	{ 0, 0, 0, 0 }
@@ -388,9 +436,7 @@ int main(int argc, char **argv)
 	int index;
 	int c;
 
-	dev_name = "/dev/video0";
 	pixel_format = V4L2_PIX_FMT_SGRBG10;
-
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_options, long_options, &index);
@@ -400,10 +446,6 @@ int main(int argc, char **argv)
 
 		switch (c) {
 		case 0: /* getopt_long() flag */
-			break;
-
-		case 'd':
-			dev_name = optarg;
 			break;
 
 		case 'e':
@@ -416,7 +458,31 @@ int main(int argc, char **argv)
 
 			break;
 
+		case 'r':
+			gain[RED_GAIN] = atol(optarg);
+
+			if (gain[RED_GAIN] < 1 || gain[RED_GAIN] > 128)
+				gain[RED_GAIN] = 0;
+
+			break;
+
+		case 'g':
+			gain[GREEN_GAIN] = atol(optarg);
+
+			if (gain[GREEN_GAIN] < 1 || gain[GREEN_GAIN] > 128)
+				gain[GREEN_GAIN] = 0;
+
+			break;
+
 		case 'b':
+			gain[BLUE_GAIN] = atol(optarg);
+
+			if (gain[BLUE_GAIN] < 1 || gain[BLUE_GAIN] > 128)
+				gain[BLUE_GAIN] = 0;
+
+			break;
+
+		case 'a':
 			pixel_format = V4L2_PIX_FMT_SGRBG10;
 			break;
 
