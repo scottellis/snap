@@ -23,9 +23,11 @@
 #include <asm/types.h>
 #include <linux/videodev2.h>
 
-#define V4L2_MT9P031_GREEN_GAIN		(V4L2_CID_PRIVATE_BASE+1)
-#define V4L2_MT9P031_BLUE_GAIN		(V4L2_CID_PRIVATE_BASE+2)
-#define V4L2_MT9P031_RED_GAIN		(V4L2_CID_PRIVATE_BASE+3)
+#define V4L2_MT9P031_GREEN_GAIN			(V4L2_CID_PRIVATE_BASE + 0)
+#define V4L2_MT9P031_BLUE_GAIN			(V4L2_CID_PRIVATE_BASE + 1)
+#define V4L2_MT9P031_RED_GAIN			(V4L2_CID_PRIVATE_BASE + 2)
+#define V4L2_MT9P031_FRAMESIZE			(V4L2_CID_PRIVATE_BASE + 3)
+
 
 struct buffer {
         void *start;
@@ -39,6 +41,7 @@ int gain[3];
 
 char dev_name[] = "/dev/video0";
 int exposure_us;
+int framesize;
 int pixel_format;
 int image_width = 2560;
 int image_height = 1920;
@@ -115,6 +118,35 @@ static void set_gain(int fd, int control_id, int gain)
 		memset(&control, 0, sizeof (control));
 		control.id = control_id;
 		control.value = gain;
+
+		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
+		        perror("VIDIOC_S_CTRL");
+	}
+}
+
+static void set_framesize(int fd, int size)
+{
+	struct v4l2_queryctrl queryctrl;
+	struct v4l2_control control;
+
+	memset(&queryctrl, 0, sizeof (queryctrl));
+	queryctrl.id = V4L2_MT9P031_FRAMESIZE;
+
+	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+		if (errno != EINVAL) {
+		        perror("VIDIOC_QUERYCTRL");
+		} 
+		else {
+		        printf("Framesize is not supported\n");
+		}
+	} 
+	else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
+		printf("Framesize is not supported\n");
+	} 
+	else {
+		memset(&control, 0, sizeof (control));
+		control.id = V4L2_MT9P031_FRAMESIZE;
+		control.value = size;
 
 		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
 		        perror("VIDIOC_S_CTRL");
@@ -369,6 +401,9 @@ static void init_device(void)
 	if (gain[BLUE_GAIN] > 0)
 		set_gain(fd, V4L2_MT9P031_BLUE_GAIN, gain[BLUE_GAIN]);
 
+	if (framesize >= 0)
+		set_framesize(fd, framesize);
+
 	init_mmap();
 }
 
@@ -413,6 +448,7 @@ static void usage(FILE *fp, int argc, char **argv)
 		 "-r | --red           Red gain\n"
 		 "-g | --green         Green gain\n"
 		 "-b | --blue          Blue gain\n"
+		 "-f | --framesize     Framesize 0=640x480, 1=1280x960, 2=2560x1920\n"
 		 "-a | --bayer         Request image in bayer GRBG format\n"
 		 "-y | --yuv           Request image in YUYV format\n"
 		 "-h | --help          Print this message\n"
@@ -420,13 +456,14 @@ static void usage(FILE *fp, int argc, char **argv)
 		 argv[0]);
 }
 
-static const char short_options [] = "e:r:g:b:ayh";
+static const char short_options [] = "e:r:g:b:f:ayh";
 
 static const struct option long_options [] = {
 	{ "exposure",	required_argument,	NULL,	'e' },
 	{ "red",	required_argument,	NULL,	'r' },
 	{ "green",	required_argument,	NULL,	'g' },
 	{ "blue",	required_argument,	NULL,	'b' },
+	{ "framesize",	required_argument,	NULL,	'f' },
 	{ "bayer",	no_argument,		NULL,	'a' },
 	{ "yuv",	no_argument,		NULL,	'y' },	
 	{ "help",	no_argument,		NULL,	'h' },
@@ -439,6 +476,7 @@ int main(int argc, char **argv)
 	int c;
 
 	pixel_format = V4L2_PIX_FMT_SGRBG10;
+	framesize = -1;
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_options, long_options, &index);
@@ -481,6 +519,14 @@ int main(int argc, char **argv)
 
 			if (gain[BLUE_GAIN] < 1 || gain[BLUE_GAIN] > 128)
 				gain[BLUE_GAIN] = 0;
+
+			break;
+
+		case 'f':
+			framesize = atol(optarg);
+
+			if (framesize < 0 || framesize > 2)
+				framesize = -1;
 
 			break;
 
