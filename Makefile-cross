@@ -1,7 +1,7 @@
 # Use this makefile for a cross-platform overo build
 
 ifeq ($(strip $(OETMP)),)
-	OETMP = /oe6
+	OETMP = $(HOME)/overo-oe/tmp 
 endif
 
 
