@@ -422,6 +422,7 @@ static void usage(FILE *fp, int argc, char **argv)
 	fprintf (fp,
 		 "Usage: %s [options]\n\n"
 		 "Options:\n"
+		 "-s | --size          size= 0->2560x1920 1->1280x960 2->640x480\n"
 		 "-e | --exposure      Exposure time in microseconds\n"
 		 "-r | --red           Red gain\n"
 		 "-b | --blue          Blue gain\n"
@@ -435,9 +436,10 @@ static void usage(FILE *fp, int argc, char **argv)
 		 argv[0]);
 }
 
-static const char short_options [] = "e:r:b:G:g:ayh";
+static const char short_options [] = "s:e:r:b:G:g:ayh";
 
 static const struct option long_options [] = {
+	{ "size",	required_argument,	NULL,	's' },
 	{ "exposure",	required_argument,	NULL,	'e' },
 	{ "red",	required_argument,	NULL,	'r' },
 	{ "blue",	required_argument,	NULL,	'b' },
@@ -453,8 +455,9 @@ static const struct option long_options [] = {
 int main(int argc, char **argv)
 {
 	int index;
-	int c;
+	int c, size;
 
+	size = 0;
 	pixel_format = V4L2_PIX_FMT_SGRBG10;
 
 	for (;;) {
@@ -465,6 +468,16 @@ int main(int argc, char **argv)
 
 		switch (c) {
 		case 0: /* getopt_long() flag */
+			break;
+
+		case 's':
+			size = atoi(optarg);
+
+			if (size < 0 || size > 2) {
+				printf("Invalid size parameter %d\n", size);
+				exit(EXIT_FAILURE);
+			}
+				
 			break;
 
 		case 'e':
@@ -533,6 +546,24 @@ int main(int argc, char **argv)
 			usage(stderr, argc, argv);
 			exit(EXIT_FAILURE);
 		}
+	}
+
+	if (size && pixel_format != V4L2_PIX_FMT_YUYV) {
+		printf("Sizes other then 2560x1920 only supported for YUV formats\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if (size == 2) {
+		image_width = 640;
+		image_height = 480;
+	}
+	else if (size == 1) {
+		image_width = 1280;
+		image_height = 960;
+	}
+	else {
+		image_width = 2560;
+		image_height = 1920;
 	}
 
 	open_device();
