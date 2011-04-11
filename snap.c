@@ -47,6 +47,7 @@ int exposure_us;
 int pixel_format;
 int image_width = 2560;
 int image_height = 1920;
+int no_snap;
 int fd = -1;
 struct buffer *buffers;
 unsigned int n_buffers;
@@ -333,33 +334,35 @@ static void init_device(void)
 	fmt.fmt.pix.pixelformat = pixel_format;
 	fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-	if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
-		errno_exit("VIDIOC_S_FMT");
+	if (!no_snap) {
+		if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
+			errno_exit("VIDIOC_S_FMT");
 
-	if (fmt.fmt.pix.width != image_width || fmt.fmt.pix.height != image_height) {
-		printf("width and height changed after VIDIOC_S_FMT\n");
-		printf("fmt.fmt.pix.width = %d\n", fmt.fmt.pix.width);
-		printf("fmt.fmt.pix.height = %d\n", fmt.fmt.pix.height);
-	}
+		if (fmt.fmt.pix.width != image_width || fmt.fmt.pix.height != image_height) {
+			printf("width and height changed after VIDIOC_S_FMT\n");
+			printf("fmt.fmt.pix.width = %d\n", fmt.fmt.pix.width);
+			printf("fmt.fmt.pix.height = %d\n", fmt.fmt.pix.height);
+		}
 
-	if (fmt.fmt.pix.pixelformat != pixel_format)
-		printf("pixelformat changed after VIDIOC_S_FMT\n");
+		if (fmt.fmt.pix.pixelformat != pixel_format)
+			printf("pixelformat changed after VIDIOC_S_FMT\n");
 
-	//printf("fmt.fmt.pix.bytesperline = %d\n", fmt.fmt.pix.bytesperline);
-	//printf("fmt.fmt.pix.sizeimage = %d\n", fmt.fmt.pix.sizeimage);
+		//printf("fmt.fmt.pix.bytesperline = %d\n", fmt.fmt.pix.bytesperline);
+		//printf("fmt.fmt.pix.sizeimage = %d\n", fmt.fmt.pix.sizeimage);
 
-	min = fmt.fmt.pix.width * 2;
-	if (fmt.fmt.pix.bytesperline < min) {
-		printf("fixing bytesperline from %d to %d\n",
-			fmt.fmt.pix.bytesperline, min);		
-		fmt.fmt.pix.bytesperline = min;
-	}
+		min = fmt.fmt.pix.width * 2;
+		if (fmt.fmt.pix.bytesperline < min) {
+			printf("fixing bytesperline from %d to %d\n",
+				fmt.fmt.pix.bytesperline, min);		
+			fmt.fmt.pix.bytesperline = min;
+		}
 
-	min = fmt.fmt.pix.bytesperline * fmt.fmt.pix.height;
-	if (fmt.fmt.pix.sizeimage < min) {
-		printf("fixing sizeimage from %d to %d\n",
-			fmt.fmt.pix.sizeimage, min);
-		fmt.fmt.pix.sizeimage = min;
+		min = fmt.fmt.pix.bytesperline * fmt.fmt.pix.height;
+		if (fmt.fmt.pix.sizeimage < min) {
+			printf("fixing sizeimage from %d to %d\n",
+				fmt.fmt.pix.sizeimage, min);
+			fmt.fmt.pix.sizeimage = min;
+		}
 	}
 
 	if (exposure_us > 0)
@@ -382,7 +385,8 @@ static void init_device(void)
 			set_gain(fd, V4L2_MT9P031_GREEN2_GAIN, gain[GREEN2_GAIN]);
 	}
 
-	init_mmap();
+	if (!no_snap)
+		init_mmap();
 }
 
 static void close_device(void)
@@ -431,12 +435,13 @@ static void usage(FILE *fp, int argc, char **argv)
 		 "-n | --gain          Global gain\n"
 		 "-a | --bayer         Request image in bayer GRBG format\n"
 		 "-y | --yuv           Request image in YUYV format\n"
+                 "-o | --nosnap        Only apply gain/exposure settings, no picture\n"
 		 "-h | --help          Print this message\n"
 		 "",
 		 argv[0]);
 }
 
-static const char short_options [] = "s:e:r:b:G:g:ayh";
+static const char short_options [] = "s:e:r:b:G:g:ayoh";
 
 static const struct option long_options [] = {
 	{ "size",	required_argument,	NULL,	's' },
@@ -448,6 +453,7 @@ static const struct option long_options [] = {
 	{ "gain",	required_argument,	NULL,	'n' },
 	{ "bayer",	no_argument,		NULL,	'a' },
 	{ "yuv",	no_argument,		NULL,	'y' },	
+	{ "nosnap",	no_argument,		NULL,	'o' },
 	{ "help",	no_argument,		NULL,	'h' },
 	{ 0, 0, 0, 0 }
 };
@@ -459,6 +465,7 @@ int main(int argc, char **argv)
 
 	size = 0;
 	pixel_format = V4L2_PIX_FMT_SGRBG10;
+	no_snap = 0;
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_options, long_options, &index);
@@ -538,6 +545,10 @@ int main(int argc, char **argv)
 			pixel_format = V4L2_PIX_FMT_YUYV;
 			break;			
 
+		case 'o':
+			no_snap = 1;
+			break;
+
 		case 'h':
 			usage(stdout, argc, argv);
 			exit (EXIT_SUCCESS);
@@ -568,9 +579,13 @@ int main(int argc, char **argv)
 
 	open_device();
 	init_device();
-	start_capturing();
-	mainloop();
-	stop_capturing();
+
+	if (!no_snap) {
+		start_capturing();
+		mainloop();
+		stop_capturing();
+	}
+
 	uninit_device();
 	close_device();
 
