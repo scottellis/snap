@@ -441,7 +441,7 @@ static void usage(FILE *fp, int argc, char **argv)
 		 argv[0]);
 }
 
-static const char short_options [] = "s:e:r:b:G:g:ayoh";
+static const char short_options [] = "s:e:r:b:G:g:n:ayoh";
 
 static const struct option long_options [] = {
 	{ "size",	required_argument,	NULL,	's' },
