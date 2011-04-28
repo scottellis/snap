@@ -129,13 +129,19 @@ static void set_gain(int fd, int control_id, int gain)
 
 static void write_image(const void *p, size_t length)
 {
+	int fd;
 	int flags = O_CREAT | O_RDWR | O_TRUNC;
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 
-	int fd = open("rawimage.dat", flags, mode);
+	if (pixel_format == V4L2_PIX_FMT_SGRBG10)
+		fd = open("bayer.img", flags, mode);
+	else if (pixel_format == V4L2_PIX_FMT_YUYV)
+		fd = open("yuyv.img", flags, mode);
+	else 
+		fd = open("uyvy.img", flags, mode);
 
 	if (fd < 0) {
-		perror("open(rawimage.dat)");
+		perror("open(<image>)");
 		return;
 	}
 
@@ -426,24 +432,24 @@ static void usage(FILE *fp, int argc, char **argv)
 	fprintf (fp,
 		 "Usage: %s [options]\n\n"
 		 "Options:\n"
-		 "-s | --size          size= 0->2560x1920 1->1280x960 2->640x480\n"
+		 "-f | --format        Pixel format [uyvy, yuyv, bayer] (default uyvy)\n"
+		 "-s | --size          Image size  0:2560x1920  1:1280x960  2:640x480\n"
 		 "-e | --exposure      Exposure time in microseconds\n"
 		 "-r | --red           Red gain\n"
 		 "-b | --blue          Blue gain\n"
 		 "-G | --green1        Green1 gain\n"
 		 "-g | --green2        Green2 gain\n"
 		 "-n | --gain          Global gain\n"
-		 "-a | --bayer         Request image in bayer GRBG format\n"
-		 "-y | --yuv           Request image in YUYV format\n"
                  "-o | --nosnap        Only apply gain/exposure settings, no picture\n"
 		 "-h | --help          Print this message\n"
 		 "",
 		 argv[0]);
 }
 
-static const char short_options [] = "s:e:r:b:G:g:n:ayoh";
+static const char short_options [] = "f:s:e:r:b:G:g:n:oh";
 
 static const struct option long_options [] = {
+	{ "format",	required_argument,	NULL,	'f' },
 	{ "size",	required_argument,	NULL,	's' },
 	{ "exposure",	required_argument,	NULL,	'e' },
 	{ "red",	required_argument,	NULL,	'r' },
@@ -451,8 +457,6 @@ static const struct option long_options [] = {
 	{ "green1",	required_argument,	NULL,	'G' },
 	{ "green2",	required_argument,	NULL,	'g' },
 	{ "gain",	required_argument,	NULL,	'n' },
-	{ "bayer",	no_argument,		NULL,	'a' },
-	{ "yuv",	no_argument,		NULL,	'y' },	
 	{ "nosnap",	no_argument,		NULL,	'o' },
 	{ "help",	no_argument,		NULL,	'h' },
 	{ 0, 0, 0, 0 }
@@ -464,7 +468,7 @@ int main(int argc, char **argv)
 	int c, size;
 
 	size = 0;
-	pixel_format = V4L2_PIX_FMT_SGRBG10;
+	pixel_format = V4L2_PIX_FMT_UYVY;
 	no_snap = 0;
 
 	for (;;) {
@@ -490,10 +494,10 @@ int main(int argc, char **argv)
 		case 'e':
 			exposure_us = atol(optarg);
 
-			if (exposure_us < 1)
-				exposure_us = 1;
-			else if (exposure_us > 1000000)
-				exposure_us = 1000000;
+			if (exposure_us < 63)
+				exposure_us = 63;
+			else if (exposure_us > 142644)
+				exposure_us = 142644;
 
 			break;
 
@@ -537,14 +541,23 @@ int main(int argc, char **argv)
 
 			break;
 
-		case 'a':
-			pixel_format = V4L2_PIX_FMT_SGRBG10;
+		case 'f':
+			if (!strcasecmp(optarg, "bayer")) {
+				pixel_format = V4L2_PIX_FMT_SGRBG10;
+			}
+			else if (!strcasecmp(optarg, "yuyv")) {
+				pixel_format = V4L2_PIX_FMT_YUYV;
+			}
+			else if (!strcasecmp(optarg, "uyvy")) {
+				pixel_format = V4L2_PIX_FMT_UYVY;
+			}
+			else {
+				printf("Invalid pixel format: %s\n", optarg);
+				exit(1);
+			}
+			
 			break;
-
-		case 'y':
-			pixel_format = V4L2_PIX_FMT_YUYV;
-			break;			
-
+	
 		case 'o':
 			no_snap = 1;
 			break;
@@ -559,8 +572,8 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (size && pixel_format != V4L2_PIX_FMT_YUYV) {
-		printf("Sizes other then 2560x1920 only supported for YUV formats\n");
+	if (size && pixel_format == V4L2_PIX_FMT_SGRBG10) {
+		printf("Bayer format restricted to size 2560x1920\n");
 		exit(EXIT_FAILURE);
 	}
 
