@@ -225,6 +225,29 @@ static void mainloop(void)
 	}
 }
 
+static void set_controls(void)
+{
+	if (exposure_us > 0)
+		set_exposure(fd, exposure_us);
+
+	if (gain[GLOBAL_GAIN] > 0) {
+		set_gain(fd, V4L2_CID_GAIN, gain[GLOBAL_GAIN]);
+	}
+	else {
+		if (gain[GREEN1_GAIN] > 0)
+			set_gain(fd, V4L2_MT9P031_GREEN1_GAIN, gain[GREEN1_GAIN]);
+
+		if (gain[RED_GAIN] > 0)
+			set_gain(fd, V4L2_MT9P031_RED_GAIN, gain[RED_GAIN]);
+
+		if (gain[BLUE_GAIN] > 0)
+			set_gain(fd, V4L2_MT9P031_BLUE_GAIN, gain[BLUE_GAIN]);
+
+		if (gain[GREEN2_GAIN] > 0)
+			set_gain(fd, V4L2_MT9P031_GREEN2_GAIN, gain[GREEN2_GAIN]);
+	}
+}
+
 static void stop_capturing(void)
 {
 	enum v4l2_buf_type type;
@@ -256,7 +279,6 @@ static void start_capturing(void)
 
 	if (-1 == xioctl(fd, VIDIOC_STREAMON, &type))
 		errno_exit("VIDIOC_STREAMON");
-
 }
 
 static void uninit_device(void)
@@ -369,26 +391,6 @@ static void init_device(void)
 				fmt.fmt.pix.sizeimage, min);
 			fmt.fmt.pix.sizeimage = min;
 		}
-	}
-
-	if (exposure_us > 0)
-		set_exposure(fd, exposure_us);
-
-	if (gain[GLOBAL_GAIN] > 0) {
-		set_gain(fd, V4L2_CID_GAIN, gain[GLOBAL_GAIN]);
-	}
-	else {
-		if (gain[GREEN1_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_GREEN1_GAIN, gain[GREEN1_GAIN]);
-
-		if (gain[RED_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_RED_GAIN, gain[RED_GAIN]);
-
-		if (gain[BLUE_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_BLUE_GAIN, gain[BLUE_GAIN]);
-
-		if (gain[GREEN2_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_GREEN2_GAIN, gain[GREEN2_GAIN]);
 	}
 
 	if (!no_snap)
@@ -592,6 +594,7 @@ int main(int argc, char **argv)
 
 	open_device();
 	init_device();
+	set_controls();
 
 	if (!no_snap) {
 		start_capturing();
