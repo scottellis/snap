@@ -124,6 +124,8 @@ static void set_gain(int fd, int control_id, int gain)
 
 		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
 		        perror("VIDIOC_S_CTRL");
+
+		printf("Wrote %d to control id 0x%08X\n", gain, control_id);
 	}
 }
 
@@ -246,6 +248,52 @@ static void set_controls(void)
 		if (gain[GREEN2_GAIN] > 0)
 			set_gain(fd, V4L2_MT9P031_GREEN2_GAIN, gain[GREEN2_GAIN]);
 	}
+}
+
+static void dump_current_settings()
+{
+	struct v4l2_control control;
+
+	memset(&control, 0, sizeof (control));
+	control.id = V4L2_CID_EXPOSURE;
+	control.value = 0;
+
+	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
+	        perror("VIDIOC_G_CTRL - exposure");
+	else
+		printf("Current exposure: %u\n", control.value);
+
+
+	control.id = V4L2_MT9P031_GREEN1_GAIN;
+	control.value = 0;
+	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
+	        perror("VIDIOC_G_CTRL - green1");
+	else
+		printf("Current green1: %u\n", control.value);
+
+
+	control.id = V4L2_MT9P031_RED_GAIN;
+	control.value = 0;
+	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
+	        perror("VIDIOC_G_CTRL - red");
+	else
+		printf("Current red: %u\n", control.value);
+
+
+	control.id = V4L2_MT9P031_BLUE_GAIN;
+	control.value = 0;
+	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
+	        perror("VIDIOC_G_CTRL - blue");
+	else
+		printf("Current blue: %u\n", control.value);
+
+
+	control.id = V4L2_MT9P031_GREEN2_GAIN;
+	control.value = 0;
+	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
+	        perror("VIDIOC_G_CTRL - green2");
+	else
+		printf("Current green2: %u\n", control.value);
 }
 
 static void stop_capturing(void)
@@ -442,25 +490,27 @@ static void usage(FILE *fp, int argc, char **argv)
 		 "-G | --green1        Green1 gain\n"
 		 "-g | --green2        Green2 gain\n"
 		 "-n | --gain          Global gain\n"
-                 "-o | --nosnap        Only apply gain/exposure settings, no picture\n"
+         "-o | --nosnap        Only apply gain/exposure settings, no picture\n"
+         "-d | --dump          Dump current gain/exposure settings\n"
 		 "-h | --help          Print this message\n"
 		 "",
 		 argv[0]);
 }
 
-static const char short_options [] = "f:s:e:r:b:G:g:n:oh";
+static const char short_options [] = "f:s:e:r:b:G:g:n:odh";
 
 static const struct option long_options [] = {
-	{ "format",	required_argument,	NULL,	'f' },
-	{ "size",	required_argument,	NULL,	's' },
-	{ "exposure",	required_argument,	NULL,	'e' },
-	{ "red",	required_argument,	NULL,	'r' },
-	{ "blue",	required_argument,	NULL,	'b' },
-	{ "green1",	required_argument,	NULL,	'G' },
-	{ "green2",	required_argument,	NULL,	'g' },
-	{ "gain",	required_argument,	NULL,	'n' },
-	{ "nosnap",	no_argument,		NULL,	'o' },
-	{ "help",	no_argument,		NULL,	'h' },
+	{ "format",    required_argument,  NULL,  'f' },
+	{ "size",      required_argument,  NULL,  's' },
+	{ "exposure",  required_argument,  NULL,  'e' },
+	{ "red",       required_argument,  NULL,  'r' },
+	{ "blue",      required_argument,  NULL,  'b' },
+	{ "green1",    required_argument,  NULL,  'G' },
+	{ "green2",    required_argument,  NULL,  'g' },
+	{ "gain",      required_argument,  NULL,  'n' },
+	{ "nosnap",    no_argument,        NULL,  'o' },
+	{ "dump",      no_argument,        NULL,  'd' },
+	{ "help",      no_argument,        NULL,  'h' },
 	{ 0, 0, 0, 0 }
 };
 
@@ -468,10 +518,12 @@ int main(int argc, char **argv)
 {
 	int index;
 	int c, size;
+	int dump_settings;
 
 	size = 0;
 	pixel_format = V4L2_PIX_FMT_UYVY;
 	no_snap = 0;
+	dump_settings = 0;
 
 	for (;;) {
 		c = getopt_long(argc, argv, short_options, long_options, &index);
@@ -509,6 +561,7 @@ int main(int argc, char **argv)
 			if (gain[RED_GAIN] < 1 || gain[RED_GAIN] > 161)
 				gain[RED_GAIN] = 0;
 
+			printf("red request: %d\n", gain[RED_GAIN]);
 			break;
 
 		case 'b':
@@ -517,6 +570,7 @@ int main(int argc, char **argv)
 			if (gain[BLUE_GAIN] < 1 || gain[BLUE_GAIN] > 161)
 				gain[BLUE_GAIN] = 0;
 
+			printf("blue request: %d\n", gain[BLUE_GAIN]);
 			break;
 
 		case 'G':
@@ -525,6 +579,8 @@ int main(int argc, char **argv)
 			if (gain[GREEN1_GAIN] < 1 || gain[GREEN1_GAIN] > 161)
 				gain[GREEN1_GAIN] = 0;
 
+
+			printf("green1 request: %d\n", gain[GREEN1_GAIN]);
 			break;
 
 		case 'g':
@@ -533,6 +589,8 @@ int main(int argc, char **argv)
 			if (gain[GREEN2_GAIN] < 1 || gain[GREEN2_GAIN] > 161)
 				gain[GREEN2_GAIN] = 0;
 
+
+			printf("green2 request: %d\n", gain[GREEN2_GAIN]);
 			break;
 
 		case 'n':
@@ -562,6 +620,10 @@ int main(int argc, char **argv)
 	
 		case 'o':
 			no_snap = 1;
+			break;
+
+		case 'd':
+			dump_settings = 1;
 			break;
 
 		case 'h':
@@ -595,6 +657,9 @@ int main(int argc, char **argv)
 	open_device();
 	init_device();
 	set_controls();
+
+	if (dump_settings)
+		dump_current_settings();
 
 	if (!no_snap) {
 		start_capturing();
