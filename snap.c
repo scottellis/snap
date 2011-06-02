@@ -27,7 +27,7 @@
 #define V4L2_MT9P031_BLUE_GAIN			(V4L2_CID_PRIVATE_BASE + 1)
 #define V4L2_MT9P031_RED_GAIN			(V4L2_CID_PRIVATE_BASE + 2)
 #define V4L2_MT9P031_GREEN2_GAIN		(V4L2_CID_PRIVATE_BASE + 3)
-
+#define V4L2_MT9P031_SKIP_MODE			(V4L2_CID_PRIVATE_BASE + 4)
 
 struct buffer {
         void *start;
@@ -47,6 +47,7 @@ int exposure_us;
 int pixel_format;
 int image_width = 2560;
 int image_height = 1920;
+int skip = -1;
 int no_snap;
 int fd = -1;
 struct buffer *buffers;
@@ -67,6 +68,35 @@ static int xioctl(int fd, int request, void *arg)
 	} while (-1 == r && EINTR == errno);
 
 	return r;
+}
+
+static void set_skip(int fd, int skip)
+{
+	struct v4l2_queryctrl queryctrl;
+	struct v4l2_control control;
+
+	memset(&queryctrl, 0, sizeof (queryctrl));
+	queryctrl.id = V4L2_MT9P031_SKIP_MODE;
+
+	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &queryctrl)) {
+		if (errno != EINVAL) {
+		        perror("VIDIOC_QUERYCTRL");
+		} 
+		else {
+		        printf("V4L2_MT9P031_SKIP_MODE is not supported\n");
+		}
+	} 
+	else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
+		printf("V4L2_MT9P031_SKIP_MODE is not supported\n");
+	} 
+	else {
+		memset(&control, 0, sizeof (control));
+		control.id = V4L2_MT9P031_SKIP_MODE;
+		control.value = skip;
+
+		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
+		        perror("VIDIOC_S_CTRL");
+	}
 }
 
 static void set_exposure(int fd, int exposure)
@@ -124,8 +154,6 @@ static void set_gain(int fd, int control_id, int gain)
 
 		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
 		        perror("VIDIOC_S_CTRL");
-
-		printf("Wrote %d to control id 0x%08X\n", gain, control_id);
 	}
 }
 
@@ -139,8 +167,10 @@ static void write_image(const void *p, size_t length)
 		fd = open("bayer.img", flags, mode);
 	else if (pixel_format == V4L2_PIX_FMT_YUYV)
 		fd = open("yuyv.img", flags, mode);
-	else 
+	else if (pixel_format == V4L2_PIX_FMT_UYVY)
 		fd = open("uyvy.img", flags, mode);
+	else
+		fd = open("mono.img", flags, mode);
 
 	if (fd < 0) {
 		perror("open(<image>)");
@@ -229,6 +259,9 @@ static void mainloop(void)
 
 static void set_controls(void)
 {
+	if (skip >= 0)
+		set_skip(fd, skip);
+
 	if (exposure_us > 0)
 		set_exposure(fd, exposure_us);
 
@@ -253,6 +286,16 @@ static void set_controls(void)
 static void dump_current_settings()
 {
 	struct v4l2_control control;
+
+	memset(&control, 0, sizeof (control));
+	control.id = V4L2_MT9P031_SKIP_MODE;
+	control.value = 0;
+
+	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
+	        perror("VIDIOC_G_CTRL - skip");
+	else
+		printf("Current skip mode: %u\n", control.value);
+
 
 	memset(&control, 0, sizeof (control));
 	control.id = V4L2_CID_EXPOSURE;
@@ -483,21 +526,22 @@ static void usage(FILE *fp, int argc, char **argv)
 		 "Usage: %s [options]\n\n"
 		 "Options:\n"
 		 "-f | --format        Pixel format [uyvy, yuyv, bayer] (default uyvy)\n"
-		 "-s | --size          Image size  0:2560x1920  1:1280x960  2:640x480\n"
+		 "-s | --size          Image size  0:2560x1920  1:1280x960  2:640x480  3:320x240\n"
 		 "-e | --exposure      Exposure time in microseconds\n"
 		 "-r | --red           Red gain\n"
 		 "-b | --blue          Blue gain\n"
 		 "-G | --green1        Green1 gain\n"
 		 "-g | --green2        Green2 gain\n"
 		 "-n | --gain          Global gain\n"
-         "-o | --nosnap        Only apply gain/exposure settings, no picture\n"
-         "-d | --dump          Dump current gain/exposure settings\n"
+		 "-k | --skip          Sensor skip mode 0,1,3 default 0 affects max frame size\n"
+	         "-o | --nosnap        Only apply gain/exposure settings, no picture\n"
+        	 "-d | --dump          Dump current gain/exposure settings\n"
 		 "-h | --help          Print this message\n"
 		 "",
 		 argv[0]);
 }
 
-static const char short_options [] = "f:s:e:r:b:G:g:n:odh";
+static const char short_options [] = "f:s:e:r:b:G:g:n:k:odh";
 
 static const struct option long_options [] = {
 	{ "format",    required_argument,  NULL,  'f' },
@@ -508,6 +552,7 @@ static const struct option long_options [] = {
 	{ "green1",    required_argument,  NULL,  'G' },
 	{ "green2",    required_argument,  NULL,  'g' },
 	{ "gain",      required_argument,  NULL,  'n' },
+	{ "skip",      required_argument,  NULL,  'k' },
 	{ "nosnap",    no_argument,        NULL,  'o' },
 	{ "dump",      no_argument,        NULL,  'd' },
 	{ "help",      no_argument,        NULL,  'h' },
@@ -522,6 +567,7 @@ int main(int argc, char **argv)
 
 	size = 0;
 	pixel_format = V4L2_PIX_FMT_UYVY;
+	skip = -1;
 	no_snap = 0;
 	dump_settings = 0;
 
@@ -538,7 +584,7 @@ int main(int argc, char **argv)
 		case 's':
 			size = atoi(optarg);
 
-			if (size < 0 || size > 2) {
+			if (size < 0 || size > 3) {
 				printf("Invalid size parameter %d\n", size);
 				exit(EXIT_FAILURE);
 			}
@@ -601,6 +647,16 @@ int main(int argc, char **argv)
 
 			break;
 
+		case 'k':
+			skip = atol(optarg);
+
+			if (skip != 0 && skip != 1 && skip != 3) {
+				printf("Invalid skip value: %d\n", skip);
+				exit(1);
+			}
+
+			break;
+
 		case 'f':
 			if (!strcasecmp(optarg, "bayer")) {
 				pixel_format = V4L2_PIX_FMT_SGRBG10;
@@ -636,22 +692,34 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if (size && pixel_format == V4L2_PIX_FMT_SGRBG10) {
-		printf("Bayer format restricted to size 2560x1920\n");
-		exit(EXIT_FAILURE);
-	}
+	if (!no_snap) {
+		if (pixel_format == V4L2_PIX_FMT_SGRBG10) {
+			// size must match skip since the ISP the won't resize a bayer image
+			if ((size == 0 && skip != 0) ||
+				(size == 1 && skip != 1) ||
+				(size == 2 && skip != 3) ||
+				(size == 3)) {
+				printf("Invalid size/skip combo for bayer format\n");
+				exit(EXIT_FAILURE);
+			}
+		}
 
-	if (size == 2) {
-		image_width = 640;
-		image_height = 480;
-	}
-	else if (size == 1) {
-		image_width = 1280;
-		image_height = 960;
-	}
-	else {
-		image_width = 2560;
-		image_height = 1920;
+		if (size == 3) {
+			image_width = 320;
+			image_height = 240;
+		}
+		else if (size == 2) {
+			image_width = 640;
+			image_height = 480;
+		}
+		else if (size == 1) {
+			image_width = 1280;
+			image_height = 960;
+		}
+		else {
+			image_width = 2560;
+			image_height = 1920;
+		}
 	}
 
 	open_device();
