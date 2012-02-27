@@ -38,7 +38,8 @@
 #include <asm/types.h>
 #include <linux/videodev2.h>
 
-#define CASPA_IMAGE_WIDTH 752
+//#define CASPA_IMAGE_WIDTH 752
+#define CASPA_IMAGE_WIDTH 640
 #define CASPA_IMAGE_HEIGHT 480
 
 struct buffer {
@@ -515,7 +516,7 @@ int main(int argc, char **argv)
 	color_effects = -1;
 	hflip = -1;
 	vflip = -1;
-	show = -1;
+	show = 0;
 	snap = 1;
  
 	for (;;) {
