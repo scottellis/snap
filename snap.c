@@ -475,7 +475,7 @@ static void usage(char *argv_0)
 		"-n | --nosnap         Do not take picture\n"	
 		"-s | --show           Show current settings\n"
 		"-h | --help           Print this message\n"
-		"",
+		"\n",
 		argv_0);
 
 	exit(1);
