@@ -466,11 +466,11 @@ static void usage(char *argv_0)
 		"-e | --exposure      Exposure 2-566, default 480\n"
 		"-g | --gain          Analog gain, 16-64, default 16\n"
 
-		"--auto-gain          0 or 1\n"
-		"--auto-exposure      0 or 1\n"
-		"--color-effects      0-2\n"
-		"--hflip              0 or 1\n"
-		"--vflip              0 or 1\n"
+		"-E | --auto-exposure      0 or 1\n"
+		"-G | --auto-gain          0 or 1\n"
+		"-x | --color-effects      0-2\n"
+		"-H | --hflip              0 or 1\n"
+		"-V | --vflip              0 or 1\n"
 
 		"-n | --nosnap        Do not take picture\n"	
 		"-s | --show          Show current settings\n"
