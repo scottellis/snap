@@ -460,21 +460,21 @@ static void usage(char *argv_0)
 {
 	printf("Usage: %s [options]\n\n"
 		"Options:\n"
-		"-f | --format        Pixel format [uyvy, yuyv, bayer] (default uyvy)\n"
-		"-b | --brightness    Brightness, 0-255, default 16\n"
-		"-c | --contrast      Contrast, 0-255, default 16\n"
-		"-e | --exposure      Exposure 2-566, default 480\n"
-		"-g | --gain          Analog gain, 16-64, default 16\n"
+		"-f | --format         Pixel format [uyvy, yuyv, bayer] (default uyvy)\n"
+		"-b | --brightness     Brightness, 0-255, default 16\n"
+		"-c | --contrast       Contrast, 0-255, default 16\n"
+		"-e | --exposure       Exposure 2-566, default 480\n"
+		"-g | --gain           Analog gain, 16-64, default 16\n"
 
-		"-E | --auto-exposure      0 or 1\n"
-		"-G | --auto-gain          0 or 1\n"
-		"-x | --color-effects      0-2\n"
-		"-H | --hflip              0 or 1\n"
-		"-V | --vflip              0 or 1\n"
+		"-E | --auto-exposure  0 or 1\n"
+		"-G | --auto-gain      0 or 1\n"
+		"-x | --color-effects  0-2\n"
+		"-H | --hflip          0 or 1\n"
+		"-V | --vflip          0 or 1\n"
 
-		"-n | --nosnap        Do not take picture\n"	
-		"-s | --show          Show current settings\n"
-		"-h | --help          Print this message\n"
+		"-n | --nosnap         Do not take picture\n"	
+		"-s | --show           Show current settings\n"
+		"-h | --help           Print this message\n"
 		"",
 		argv_0);
 
