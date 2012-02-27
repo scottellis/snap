@@ -19,6 +19,8 @@
 
    Image Dimensions : w x h : 752 x 480
 	
+   But we ask for resized images at 640x480 to prevent page faults
+   in the ISP/V4L2 code retrieving the image.
  */
 
 #include <stdio.h>
@@ -38,7 +40,6 @@
 #include <asm/types.h>
 #include <linux/videodev2.h>
 
-//#define CASPA_IMAGE_WIDTH 752
 #define CASPA_IMAGE_WIDTH 640
 #define CASPA_IMAGE_HEIGHT 480
 
@@ -506,7 +507,7 @@ int main(int argc, char **argv)
 	int c;
 	int show;
 
-	format = V4L2_PIX_FMT_UYVY;
+	format = V4L2_PIX_FMT_YUYV;
 	brightness = -1;
 	contrast = -1;
 	exposure = -1;
@@ -531,13 +532,15 @@ int main(int argc, char **argv)
 
 		case 'f':
 			if (!strcasecmp(optarg, "bayer")) {
-				format = V4L2_PIX_FMT_SGRBG10;
+				//format = V4L2_PIX_FMT_SGRBG10;
+				printf("Format bayer disabled. Page fault retrieving image.\n");
+				exit(1);
 			}
 			else if (!strcasecmp(optarg, "yuyv")) {
 				format = V4L2_PIX_FMT_YUYV;
 			}
 			else if (!strcasecmp(optarg, "uyvy")) {
-				format = V4L2_PIX_FMT_UYVY;
+				format = V4L2_PIX_FMT_UYVY;				
 			}
 			else {
 				printf("Invalid pixel format: %s\n", optarg);
