@@ -1,9 +1,24 @@
 /*
- *  V4L2 video capture example
- *
- *  This program can be used and distributed without restrictions.
- *
- *  Modified and hard-coded for my own camera testing.
+   V4L2 video capture example
+ 
+   This program can be used and distributed without restrictions.
+ 
+   Modified for Gumstix Caspa (MT9V032) driver.
+
+   The following controls are provided
+
+   V4L2_CID_BRIGHTNESS : 0-255, step 1, default 16
+   V4L2_CID_CONTRAST : 0-255, step 1, default 16
+   V4L2_CID_EXPOSURE : 2-566, step 1, default 480
+   V4L2_CID_AUTOGAIN : boolean
+   V4L2_CID_GAIN : 16-64, step 1, default 16
+   V4L2_CID_HFLIP : boolean
+   V4L2_CID_VFLIP : boolean
+   V4L2_CID_COLORFX : 0-2 { none, bw, sepia }
+   V4L2_CID_EXPOSURE_AUTO : boolean
+
+   Image Dimensions : w x h : 752 x 480
+	
  */
 
 #include <stdio.h>
@@ -23,35 +38,35 @@
 #include <asm/types.h>
 #include <linux/videodev2.h>
 
-#define V4L2_MT9P031_GREEN1_GAIN		(V4L2_CID_PRIVATE_BASE + 0)
-#define V4L2_MT9P031_BLUE_GAIN			(V4L2_CID_PRIVATE_BASE + 1)
-#define V4L2_MT9P031_RED_GAIN			(V4L2_CID_PRIVATE_BASE + 2)
-#define V4L2_MT9P031_GREEN2_GAIN		(V4L2_CID_PRIVATE_BASE + 3)
-#define V4L2_MT9P031_SKIP_MODE			(V4L2_CID_PRIVATE_BASE + 4)
+#define CASPA_IMAGE_WIDTH 752
+#define CASPA_IMAGE_HEIGHT 480
 
 struct buffer {
         void *start;
         size_t length;
 };
 
-#define GREEN1_GAIN 0
-#define BLUE_GAIN 1
-#define RED_GAIN 2
-#define GREEN2_GAIN 3
-#define GLOBAL_GAIN 4
-
-int gain[5];
 
 char dev_name[] = "/dev/video0";
-int exposure_us;
-int pixel_format;
-int image_width = 2560;
-int image_height = 1920;
-int skip = -1;
-int no_snap;
+
+int format;
+int brightness;
+int contrast;
+int exposure;
+int gain;
+int auto_gain;
+int auto_exposure;
+int color_effects;
+int hflip;
+int vflip;
+int snap;
+
+int image_width = CASPA_IMAGE_WIDTH;
+int image_height = CASPA_IMAGE_HEIGHT;
+
 int fd = -1;
 struct buffer *buffers;
-unsigned int n_buffers;
+unsigned int num_buffers;
 
 static void errno_exit(const char *s)
 {
@@ -70,104 +85,17 @@ static int xioctl(int fd, int request, void *arg)
 	return r;
 }
 
-static void set_skip(int fd, int skip)
-{
-	struct v4l2_queryctrl queryctrl;
-	struct v4l2_control control;
-
-	memset(&queryctrl, 0, sizeof (queryctrl));
-	queryctrl.id = V4L2_MT9P031_SKIP_MODE;
-
-	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &queryctrl)) {
-		if (errno != EINVAL) {
-		        perror("VIDIOC_QUERYCTRL");
-		} 
-		else {
-		        printf("V4L2_MT9P031_SKIP_MODE is not supported\n");
-		}
-	} 
-	else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
-		printf("V4L2_MT9P031_SKIP_MODE is not supported\n");
-	} 
-	else {
-		memset(&control, 0, sizeof (control));
-		control.id = V4L2_MT9P031_SKIP_MODE;
-		control.value = skip;
-
-		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
-		        perror("VIDIOC_S_CTRL");
-	}
-}
-
-static void set_exposure(int fd, int exposure)
-{
-	struct v4l2_queryctrl queryctrl;
-	struct v4l2_control control;
-
-	memset(&queryctrl, 0, sizeof (queryctrl));
-	queryctrl.id = V4L2_CID_EXPOSURE;
-
-	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &queryctrl)) {
-		if (errno != EINVAL) {
-		        perror("VIDIOC_QUERYCTRL");
-		} 
-		else {
-		        printf("V4L2_CID_EXPOSURE is not supported\n");
-		}
-	} 
-	else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
-		printf("V4L2_CID_EXPOSURE is not supported\n");
-	} 
-	else {
-		memset(&control, 0, sizeof (control));
-		control.id = V4L2_CID_EXPOSURE;
-		control.value = exposure;
-
-		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
-		        perror("VIDIOC_S_CTRL");
-	}
-}
-
-static void set_gain(int fd, int control_id, int gain)
-{
-	struct v4l2_queryctrl queryctrl;
-	struct v4l2_control control;
-
-	memset(&queryctrl, 0, sizeof (queryctrl));
-	queryctrl.id = control_id;
-
-	if (-1 == ioctl(fd, VIDIOC_QUERYCTRL, &queryctrl)) {
-		if (errno != EINVAL) {
-		        perror("VIDIOC_QUERYCTRL");
-		} 
-		else {
-		        printf("Control is not supported\n");
-		}
-	} 
-	else if (queryctrl.flags & V4L2_CTRL_FLAG_DISABLED) {
-		printf("Control is not supported\n");
-	} 
-	else {
-		memset(&control, 0, sizeof (control));
-		control.id = control_id;
-		control.value = gain;
-
-		if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control))
-		        perror("VIDIOC_S_CTRL");
-	}
-}
-
 static void write_image(const void *p, size_t length)
 {
 	int fd;
 	int flags = O_CREAT | O_RDWR | O_TRUNC;
 	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH;
 
-	if (pixel_format == V4L2_PIX_FMT_SGRBG10)
+	if (format == V4L2_PIX_FMT_SGRBG10)
 		fd = open("bayer.img", flags, mode);
-	else if (pixel_format == V4L2_PIX_FMT_YUYV)
+	else if (format == V4L2_PIX_FMT_YUYV)
 		fd = open("yuyv.img", flags, mode);
-	else if (pixel_format == V4L2_PIX_FMT_UYVY)
+	else if (format == V4L2_PIX_FMT_UYVY)
 		fd = open("uyvy.img", flags, mode);
 	else
 		fd = open("mono.img", flags, mode);
@@ -205,7 +133,7 @@ static int read_frame(void)
                 }
         }
 
-        assert(buf.index < n_buffers);
+        assert(buf.index < num_buffers);
 
 	write_image(buffers[buf.index].start, buffers[buf.index].length);
 
@@ -257,86 +185,90 @@ static void mainloop(void)
 	}
 }
 
-static void set_controls(void)
+static void set_control(int id, int value, const char *name)
 {
-	if (skip >= 0)
-		set_skip(fd, skip);
+	char buff[256];
+	struct v4l2_control control;
 
-	if (exposure_us > 0)
-		set_exposure(fd, exposure_us);
+	memset(&control, 0, sizeof (control));
+	control.id = id;
+	control.value = value;
 
-	if (gain[GLOBAL_GAIN] > 0) {
-		set_gain(fd, V4L2_CID_GAIN, gain[GLOBAL_GAIN]);
-	}
-	else {
-		if (gain[GREEN1_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_GREEN1_GAIN, gain[GREEN1_GAIN]);
-
-		if (gain[RED_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_RED_GAIN, gain[RED_GAIN]);
-
-		if (gain[BLUE_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_BLUE_GAIN, gain[BLUE_GAIN]);
-
-		if (gain[GREEN2_GAIN] > 0)
-			set_gain(fd, V4L2_MT9P031_GREEN2_GAIN, gain[GREEN2_GAIN]);
+	if (-1 == ioctl(fd, VIDIOC_S_CTRL, &control)) {
+		sprintf(buff, "VIDIOC_S_CTRL - %s", name);
+        perror(buff);
 	}
 }
 
-static void dump_current_settings()
+static void set_controls()
+{	
+	if (brightness >= 0)
+		set_control(V4L2_CID_BRIGHTNESS, brightness, "brightness");
+
+	if (contrast >= 0)
+		set_control(V4L2_CID_CONTRAST, contrast, "contrast");
+
+	if (exposure >= 0)
+		set_control(V4L2_CID_EXPOSURE, exposure, "exposure");
+
+	if (gain >= 0)
+		set_control(V4L2_CID_GAIN, gain, "gain");
+
+	if (auto_gain >= 0)
+		set_control(V4L2_CID_AUTOGAIN, auto_gain, "auto-gain");
+
+	if (auto_exposure >= 0)
+		set_control(V4L2_CID_EXPOSURE_AUTO, auto_exposure, "auto-exposure");
+
+	if (color_effects >= 0)
+		set_control(V4L2_CID_COLORFX, color_effects, "color-effects");
+
+	if (hflip >= -1)
+		set_control(V4L2_CID_HFLIP, hflip, "hflip");
+
+	if (vflip >= -1)
+		set_control(V4L2_CID_VFLIP, vflip, "vflip");
+}
+
+static int read_control(int id)
 {
 	struct v4l2_control control;
 
 	memset(&control, 0, sizeof (control));
-	control.id = V4L2_MT9P031_SKIP_MODE;
+	control.id = id;
 	control.value = 0;
 
 	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
-	        perror("VIDIOC_G_CTRL - skip");
-	else
-		printf("Current skip mode: %u\n", control.value);
+		return -1;
 
+	return control.value;
+}
 
-	memset(&control, 0, sizeof (control));
-	control.id = V4L2_CID_EXPOSURE;
-	control.value = 0;
+static void show_setting(int id, const char *name)
+{
+	char buff[256];
+	int val = read_control(id);
 
-	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
-	        perror("VIDIOC_G_CTRL - exposure");
-	else
-		printf("Current exposure: %u\n", control.value);
+	if (val == -1) {
+		sprintf(buff, "VIDIOC_G_CTRL - %s", name);
+        perror(buff);
+	}
+	else {
+		printf("Current %s: %d\n", name, val);
+	}
+}
 
-
-	control.id = V4L2_MT9P031_GREEN1_GAIN;
-	control.value = 0;
-	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
-	        perror("VIDIOC_G_CTRL - green1");
-	else
-		printf("Current green1: %u\n", control.value);
-
-
-	control.id = V4L2_MT9P031_RED_GAIN;
-	control.value = 0;
-	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
-	        perror("VIDIOC_G_CTRL - red");
-	else
-		printf("Current red: %u\n", control.value);
-
-
-	control.id = V4L2_MT9P031_BLUE_GAIN;
-	control.value = 0;
-	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
-	        perror("VIDIOC_G_CTRL - blue");
-	else
-		printf("Current blue: %u\n", control.value);
-
-
-	control.id = V4L2_MT9P031_GREEN2_GAIN;
-	control.value = 0;
-	if (-1 == ioctl(fd, VIDIOC_G_CTRL, &control))
-	        perror("VIDIOC_G_CTRL - green2");
-	else
-		printf("Current green2: %u\n", control.value);
+static void show_settings()
+{
+	show_setting(V4L2_CID_BRIGHTNESS, "brightness");
+	show_setting(V4L2_CID_CONTRAST, "contrast");
+	show_setting(V4L2_CID_EXPOSURE, "exposure");
+	show_setting(V4L2_CID_AUTOGAIN, "autogain");
+	show_setting(V4L2_CID_GAIN, "gain");
+	show_setting(V4L2_CID_HFLIP, "hflip");
+	show_setting(V4L2_CID_VFLIP, "vflip");
+	show_setting(V4L2_CID_COLORFX, "color_effects");
+	show_setting(V4L2_CID_EXPOSURE_AUTO, "auto_exposure");
 }
 
 static void stop_capturing(void)
@@ -355,7 +287,7 @@ static void start_capturing(void)
 	enum v4l2_buf_type type;
 	struct v4l2_buffer buf;
 
-	for (i = 0; i < n_buffers; ++i) {
+	for (i = 0; i < num_buffers; ++i) {
 		memset(&buf, 0, sizeof(buf));
 
 		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -372,23 +304,25 @@ static void start_capturing(void)
 		errno_exit("VIDIOC_STREAMON");
 }
 
-static void uninit_device(void)
+static void cleanup_device(void)
 {
 	unsigned int i;
 
-	for (i = 0; i < n_buffers; ++i)
+	for (i = 0; i < num_buffers; ++i)
 		if (-1 == munmap (buffers[i].start, buffers[i].length))
-			errno_exit ("munmap");
+			errno_exit("munmap");
 
 	free (buffers);
 }
 
 static void init_mmap(void)
 {
+	int i;
 	struct v4l2_requestbuffers req;
 
 	memset(&req, 0, sizeof(req));
 
+	num_buffers = 0;
 	req.count = 2;
 	req.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	req.memory = V4L2_MEMORY_MMAP;
@@ -417,27 +351,29 @@ static void init_mmap(void)
 		exit(EXIT_FAILURE);
 	}
 
-	for (n_buffers = 0; n_buffers < req.count; ++n_buffers) {
+	for (i = 0; i < req.count; i++) {
 		struct v4l2_buffer buf;
 
 		memset(&buf, 0, sizeof(buf));
 
 		buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 		buf.memory = V4L2_MEMORY_MMAP;
-		buf.index = n_buffers;
+		buf.index = i;
 
 		if (-1 == xioctl(fd, VIDIOC_QUERYBUF, &buf))
 			errno_exit ("VIDIOC_QUERYBUF");
 
-		buffers[n_buffers].length = buf.length;
-		buffers[n_buffers].start = mmap(NULL, buf.length, 
+		buffers[i].length = buf.length;
+		buffers[i].start = mmap(NULL, buf.length, 
 						PROT_READ | PROT_WRITE,
 						MAP_SHARED,
 						fd, buf.m.offset);
 
-		if (MAP_FAILED == buffers[n_buffers].start)
+		if (MAP_FAILED == buffers[i].start)
 			errno_exit("mmap");
 	}
+
+	num_buffers = 2;
 }
 
 static void init_device(void)
@@ -450,10 +386,10 @@ static void init_device(void)
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	fmt.fmt.pix.width = image_width;
 	fmt.fmt.pix.height = image_height;
-	fmt.fmt.pix.pixelformat = pixel_format;
+	fmt.fmt.pix.pixelformat = format;
 	fmt.fmt.pix.field = V4L2_FIELD_NONE;
 
-	if (!no_snap) {
+	if (snap) {
 		if (-1 == xioctl(fd, VIDIOC_S_FMT, &fmt))
 			errno_exit("VIDIOC_S_FMT");
 
@@ -463,7 +399,7 @@ static void init_device(void)
 			printf("fmt.fmt.pix.height = %d\n", fmt.fmt.pix.height);
 		}
 
-		if (fmt.fmt.pix.pixelformat != pixel_format)
+		if (fmt.fmt.pix.pixelformat != format)
 			printf("pixelformat changed after VIDIOC_S_FMT\n");
 
 		//printf("fmt.fmt.pix.bytesperline = %d\n", fmt.fmt.pix.bytesperline);
@@ -484,7 +420,7 @@ static void init_device(void)
 		}
 	}
 
-	if (!no_snap)
+	if (snap)
 		init_mmap();
 }
 
@@ -520,59 +456,70 @@ static void open_device(void)
 	}
 }
 
-static void usage(FILE *fp, int argc, char **argv)
+static void usage(char *argv_0)
 {
-	fprintf (fp,
-		 "Usage: %s [options]\n\n"
-		 "Options:\n"
-		 "-f | --format        Pixel format [uyvy, yuyv, bayer] (default uyvy)\n"
-		 "-s | --size          Image size  0:2560x1920  1:1280x960  2:640x480  3:320x240\n"
-		 "-e | --exposure      Exposure time in microseconds\n"
-		 "-r | --red           Red gain\n"
-		 "-b | --blue          Blue gain\n"
-		 "-G | --green1        Green1 gain\n"
-		 "-g | --green2        Green2 gain\n"
-		 "-n | --gain          Global gain\n"
-		 "-k | --skip          Sensor skip mode 0,1,3 default 0 affects max frame size\n"
-	         "-o | --nosnap        Only apply gain/exposure settings, no picture\n"
-        	 "-d | --dump          Dump current gain/exposure settings\n"
-		 "-h | --help          Print this message\n"
-		 "",
-		 argv[0]);
+	printf("Usage: %s [options]\n\n"
+		"Options:\n"
+		"-f | --format        Pixel format [uyvy, yuyv, bayer] (default uyvy)\n"
+		"-b | --brightness    Brightness, 0-255, default 16\n"
+		"-c | --contrast      Contrast, 0-255, default 16\n"
+		"-e | --exposure      Exposure 2-566, default 480\n"
+		"-g | --gain          Analog gain, 16-64, default 16\n"
+
+		"--auto-gain          0 or 1\n"
+		"--auto-exposure      0 or 1\n"
+		"--color-effects      0-2\n"
+		"--hflip              0 or 1\n"
+		"--vflip              0 or 1\n"
+
+		"-n | --nosnap        Do not take picture\n"	
+		"-s | --show          Show current settings\n"
+		"-h | --help          Print this message\n"
+		"",
+		argv_0);
+
+	exit(1);
 }
 
-static const char short_options [] = "f:s:e:r:b:G:g:n:k:odh";
+static const char short_opts [] = "f:b:c:e:g:E:G:x:H:V:nsh";
 
-static const struct option long_options [] = {
-	{ "format",    required_argument,  NULL,  'f' },
-	{ "size",      required_argument,  NULL,  's' },
-	{ "exposure",  required_argument,  NULL,  'e' },
-	{ "red",       required_argument,  NULL,  'r' },
-	{ "blue",      required_argument,  NULL,  'b' },
-	{ "green1",    required_argument,  NULL,  'G' },
-	{ "green2",    required_argument,  NULL,  'g' },
-	{ "gain",      required_argument,  NULL,  'n' },
-	{ "skip",      required_argument,  NULL,  'k' },
-	{ "nosnap",    no_argument,        NULL,  'o' },
-	{ "dump",      no_argument,        NULL,  'd' },
-	{ "help",      no_argument,        NULL,  'h' },
+static const struct option long_opts [] = {
+	{ "format",    	    required_argument,  NULL,  'f' },
+	{ "brightness",	    required_argument,  NULL,  'b' },
+	{ "contrast",       required_argument,  NULL,  'c' },
+	{ "exposure",       required_argument,  NULL,  'e' },
+	{ "gain",           required_argument,  NULL,  'g' },
+    { "auto-exposure",  required_argument,  NULL,  'E' },
+    { "auto-gain",      required_argument,  NULL,  'G' },
+    { "color-effects",  required_argument,  NULL,  'x' },
+    { "hflip",          required_argument,  NULL,  'H' },
+	{ "vflip",          required_argument,  NULL,  'V' },
+	{ "nosnap",         no_argument,        NULL,  'n' },
+	{ "show",           no_argument,        NULL,  's' },
+	{ "help",           no_argument,        NULL,  'h' },
 	{ 0, 0, 0, 0 }
 };
 
 int main(int argc, char **argv)
 {
-	int index;
-	int c, size;
-	int dump_settings;
+	int c;
+	int show;
 
-	size = 0;
-	pixel_format = V4L2_PIX_FMT_UYVY;
-	skip = -1;
-	no_snap = 0;
-	dump_settings = 0;
-
+	format = V4L2_PIX_FMT_UYVY;
+	brightness = -1;
+	contrast = -1;
+	exposure = -1;
+	gain = -1;
+	auto_gain = -1;
+	auto_exposure = -1;
+	color_effects = -1;
+	hflip = -1;
+	vflip = -1;
+	show = -1;
+	snap = 1;
+ 
 	for (;;) {
-		c = getopt_long(argc, argv, short_options, long_options, &index);
+		c = getopt_long(argc, argv, short_opts, long_opts, NULL);
 
 		if (-1 == c)
 			break;
@@ -581,144 +528,109 @@ int main(int argc, char **argv)
 		case 0: /* getopt_long() flag */
 			break;
 
-		case 's':
-			size = atoi(optarg);
-
-			if (size < 0 || size > 3) {
-				printf("Invalid size parameter %d\n", size);
-				exit(EXIT_FAILURE);
-			}
-				
-			break;
-
-		case 'e':
-			exposure_us = atol(optarg);
-
-			if (exposure_us < 63)
-				exposure_us = 63;
-			else if (exposure_us > 142644)
-				exposure_us = 142644;
-
-			break;
-
-		case 'r':
-			gain[RED_GAIN] = atol(optarg);
-
-			if (gain[RED_GAIN] < 1 || gain[RED_GAIN] > 161)
-				gain[RED_GAIN] = 0;
-
-			printf("red request: %d\n", gain[RED_GAIN]);
-			break;
-
-		case 'b':
-			gain[BLUE_GAIN] = atol(optarg);
-
-			if (gain[BLUE_GAIN] < 1 || gain[BLUE_GAIN] > 161)
-				gain[BLUE_GAIN] = 0;
-
-			printf("blue request: %d\n", gain[BLUE_GAIN]);
-			break;
-
-		case 'G':
-			gain[GREEN1_GAIN] = atol(optarg);
-
-			if (gain[GREEN1_GAIN] < 1 || gain[GREEN1_GAIN] > 161)
-				gain[GREEN1_GAIN] = 0;
-
-
-			printf("green1 request: %d\n", gain[GREEN1_GAIN]);
-			break;
-
-		case 'g':
-			gain[GREEN2_GAIN] = atol(optarg);
-
-			if (gain[GREEN2_GAIN] < 1 || gain[GREEN2_GAIN] > 161)
-				gain[GREEN2_GAIN] = 0;
-
-
-			printf("green2 request: %d\n", gain[GREEN2_GAIN]);
-			break;
-
-		case 'n':
-			gain[GLOBAL_GAIN] = atol(optarg);
-
-			if (gain[GLOBAL_GAIN] < 1 || gain[GLOBAL_GAIN] > 161)
-				gain[GLOBAL_GAIN] = 0;
-
-			break;
-
-		case 'k':
-			skip = atol(optarg);
-
-			if (skip != 0 && skip != 1 && skip != 3) {
-				printf("Invalid skip value: %d\n", skip);
-				exit(1);
-			}
-
-			break;
-
 		case 'f':
 			if (!strcasecmp(optarg, "bayer")) {
-				pixel_format = V4L2_PIX_FMT_SGRBG10;
+				format = V4L2_PIX_FMT_SGRBG10;
 			}
 			else if (!strcasecmp(optarg, "yuyv")) {
-				pixel_format = V4L2_PIX_FMT_YUYV;
+				format = V4L2_PIX_FMT_YUYV;
 			}
 			else if (!strcasecmp(optarg, "uyvy")) {
-				pixel_format = V4L2_PIX_FMT_UYVY;
+				format = V4L2_PIX_FMT_UYVY;
 			}
 			else {
 				printf("Invalid pixel format: %s\n", optarg);
-				exit(1);
+				usage(argv[0]);
 			}
-			
-			break;
-	
-		case 'o':
-			no_snap = 1;
 			break;
 
-		case 'd':
-			dump_settings = 1;
+		case 'b':
+			brightness = atol(optarg);
+			if (brightness < 0 || brightness > 255) {
+				printf("Invalid brightness: %d\n", brightness);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'c':
+			contrast = atol(optarg);
+			if (contrast < 0 || contrast > 255) {
+				printf("Invalid contrast: %d\n", contrast);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'e':
+			exposure = atol(optarg);
+			if (exposure < 2 || exposure > 566) {
+				printf("Invalid exposure: %d\n", exposure);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'g':
+			gain = atol(optarg);
+			if (gain < 16 || gain > 64) {
+				printf("Invalid gain: %d\n", gain);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'E':
+			auto_exposure = atol(optarg);
+			if (auto_exposure < 0 || auto_exposure > 1) {
+				printf("Invalid auto-exposure: %d\n", auto_exposure);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'G':
+			auto_gain = atol(optarg);
+			if (auto_gain < 0 || auto_gain > 1) {
+				printf("Invalid auto-gain: %d\n", auto_gain);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'x':
+			color_effects = atol(optarg);
+			if (color_effects < 0 || color_effects > 2) {
+				printf("Invalid color-effects: %d\n", color_effects);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'H':
+			hflip = atol(optarg);
+			if (hflip < 0 || hflip > 1) {
+				printf("Invalid hflip: %d\n", hflip);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'V':
+			vflip = atol(optarg);
+			if (vflip < 0 || vflip > 1) {
+				printf("Invalid vflip: %d\n", vflip);
+				usage(argv[0]);
+			}
+			break;
+
+		case 'n':
+			snap = 0;
+			break;
+
+		case 's':
+			show = 1;
 			break;
 
 		case 'h':
-			usage(stdout, argc, argv);
-			exit (EXIT_SUCCESS);
+			usage(argv[0]);
+			break;
 
 		default:
-			usage(stderr, argc, argv);
+			usage(argv[0]);
 			exit(EXIT_FAILURE);
-		}
-	}
-
-	if (!no_snap) {
-		if (pixel_format == V4L2_PIX_FMT_SGRBG10) {
-			// size must match skip since the ISP the won't resize a bayer image
-			if ((size == 0 && skip != 0) ||
-				(size == 1 && skip != 1) ||
-				(size == 2 && skip != 3) ||
-				(size == 3)) {
-				printf("Invalid size/skip combo for bayer format\n");
-				exit(EXIT_FAILURE);
-			}
-		}
-
-		if (size == 3) {
-			image_width = 320;
-			image_height = 240;
-		}
-		else if (size == 2) {
-			image_width = 640;
-			image_height = 480;
-		}
-		else if (size == 1) {
-			image_width = 1280;
-			image_height = 960;
-		}
-		else {
-			image_width = 2560;
-			image_height = 1920;
 		}
 	}
 
@@ -726,16 +638,16 @@ int main(int argc, char **argv)
 	init_device();
 	set_controls();
 
-	if (dump_settings)
-		dump_current_settings();
+	if (show)
+		show_settings();
 
-	if (!no_snap) {
+	if (snap) {
 		start_capturing();
 		mainloop();
 		stop_capturing();
 	}
 
-	uninit_device();
+	cleanup_device();
 	close_device();
 
 	exit (EXIT_SUCCESS);
