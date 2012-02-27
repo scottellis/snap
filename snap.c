@@ -462,7 +462,7 @@ static void usage(char *argv_0)
 {
 	printf("Usage: %s [options]\n\n"
 		"Options:\n"
-		"-f | --format         Pixel format [uyvy, yuyv, bayer] (default uyvy)\n"
+		"-f | --format         Pixel format [yuyv, uyvy, bayer], default yuyv\n"
 		"-b | --brightness     Brightness, 0-255, default 16\n"
 		"-c | --contrast       Contrast, 0-255, default 16\n"
 		"-e | --exposure       Exposure 2-566, default 480\n"
