@@ -254,7 +254,7 @@ static void show_setting(int id, const char *name)
         perror(buff);
 	}
 	else {
-		printf("Current %s: %d\n", name, val);
+		printf("%s:%d\n", name, val);
 	}
 }
 
