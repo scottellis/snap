@@ -263,12 +263,12 @@ static void show_settings()
 	show_setting(V4L2_CID_BRIGHTNESS, "brightness");
 	show_setting(V4L2_CID_CONTRAST, "contrast");
 	show_setting(V4L2_CID_EXPOSURE, "exposure");
-	show_setting(V4L2_CID_AUTOGAIN, "autogain");
 	show_setting(V4L2_CID_GAIN, "gain");
+	show_setting(V4L2_CID_EXPOSURE_AUTO, "auto_exposure");
+	show_setting(V4L2_CID_AUTOGAIN, "autogain");
+	show_setting(V4L2_CID_COLORFX, "color_effects");
 	show_setting(V4L2_CID_HFLIP, "hflip");
 	show_setting(V4L2_CID_VFLIP, "vflip");
-	show_setting(V4L2_CID_COLORFX, "color_effects");
-	show_setting(V4L2_CID_EXPOSURE_AUTO, "auto_exposure");
 }
 
 static void stop_capturing(void)
